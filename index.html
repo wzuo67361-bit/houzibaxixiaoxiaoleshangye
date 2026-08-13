@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>H5 护眼消消乐 - 狂热稳定版</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+        /* 护眼暗色背景 */
+        body { 
+            background-color: #181a1f; color: #e0e6ed; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden; touch-action: none; 
+            display: flex; flex-direction: column; align-items: center; height: 100vh; width: 100vw;
+        }
+        
+        /* 全局报错横幅 */
+        #error-banner {
+            display: none; position: absolute; top: 0; left: 0; width: 100%;
+            background-color: rgba(224, 108, 117, 0.95); color: white; padding: 10px;
+            text-align: center; font-weight: bold; font-size: 14px;
+            z-index: 9999; word-wrap: break-word; box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+
+        #game-container { width: 100%; max-width: 500px; position: relative; display: flex; flex-direction: column; height: 100%; margin: 0 auto; }
+        
+        /* 顶部 UI 与时间条 */
+        #header { padding: 10px 15px; background: #21252b; box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 10; width: 100%; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .score-box { font-size: 18px; font-weight: bold; color: #98c379; display: flex; align-items: center; gap: 10px;}
+        .combo-text { font-size: 14px; color: #e06c75; font-style: italic; transition: 0.2s; }
+        
+        .btn-group { display: flex; gap: 8px; }
+        .btn { background: #61afef; color: #282c34; border: none; padding: 6px 12px; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; }
+        .btn:active { transform: scale(0.95); }
+        .btn-test { background: #c678dd; color: white; }
+        
+        /* 时间进度条 */
+        #time-bar-bg { width: 100%; height: 10px; background: #2c313a; border-radius: 5px; overflow: hidden; }
+        #time-bar-fill { height: 100%; background: linear-gradient(90deg, #e5c07b, #e06c75); width: 100%; transition: width 0.2s linear, background 0.3s; }
+
+        /* 游戏区 */
+        #canvas-wrapper { flex: 1; width: 100%; display: flex; justify-content: center; align-items: center; padding: 10px; position: relative; box-sizing: border-box; perspective: 1000px; }
+        canvas { background: #1e2227; border-radius: 12px; box-shadow: inset 0 0 20px rgba(0,0,0,0.5); display: block; max-width: 100%; max-height: 100%; }
+        
+        /* 弹窗 (设置/结算) */
+        .modal { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; z-index: 20; backdrop-filter: blur(3px); }
+        .modal-content { background: #282c34; padding: 25px; border-radius: 15px; text-align: center; border: 2px solid #61afef; width: 80%; max-width: 300px; }
+        .modal h2 { color: #61afef; margin-bottom: 20px; }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 16px; }
+        select, input[type="checkbox"] { padding: 5px; border-radius: 5px; background: #1e2227; color: #fff; border: 1px solid #61afef; }
+    </style>
+</head>
+<body>
+
+<div id="error-banner"></div>
+
+<div id="game-container">
+    <div id="header">
+        <div class="top-bar">
+            <div class="score-box">得分: <span id="score">0</span> <span class="combo-text" id="combo-display"></span></div>
+            <div class="btn-group">
+                <button class="btn btn-test" id="test-btn" onclick="toggleTestMode()">测试</button>
+                <button class="btn" onclick="showSettings()">设置</button>
+            </div>
+        </div>
+        <div id="time-bar-bg"><div id="time-bar-fill"></div></div>
+    </div>
+    <div id="canvas-wrapper">
+        <canvas id="gameCanvas"></canvas>
+    </div>
+</div>
+
+<!-- 设置弹窗 -->
+<div id="settings-modal" class="modal">
+    <div class="modal-content">
+        <h2>游戏设置</h2>
+        <div class="setting-row">
+            <label>音效开关</label>
+            <input type="checkbox" id="sound-toggle" checked>
+        </div>
+        <div class="setting-row">
+            <label>消除特效</label>
+            <select id="effect-style">
+                <option value="shatter">粒子碎裂 (爽快)</option>
+                <option value="implode">黑洞内爆 (柔和)</option>
+            </select>
+        </div>
+        <button class="btn" style="width: 100%; margin-top: 10px;" onclick="closeSettings()">继续游戏</button>
+        <button class="btn" style="width: 100%; margin-top: 10px; background: #e06c75; color: white;" onclick="resetGame()">重新开始</button>
+    </div>
+</div>
+
+<!-- 结算弹窗 -->
+<div id="gameover-modal" class="modal">
+    <div class="modal-content">
+        <h2 style="color: #e06c75;">时间到！</h2>
+        <p style="margin-bottom: 20px; font-size: 18px;">最终得分: <span id="final-score">0</span></p>
+        <button class="btn" style="width: 100%;" onclick="resetGame()">再来一局</button>
+    </div>
+</div>
+
+<script>
+/**
+ * 1. 全局异常捕获 (防卡死)
+ */
+window.onerror = function(message, source, lineno, colno, error) {
+    const errBanner = document.getElementById('error-banner');
+    if(errBanner) {
+        errBanner.style.display = 'block';
+        errBanner.innerHTML = `🚨 错误: ${message} <br>行: ${lineno}`;
+    }
+    console.error("Error:", message);
+    if (isTestMode) toggleTestMode(); 
+    return false; 
+};
+
+function logGrid(actionName) {
+    console.log(`\n=== 矩阵状态: ${actionName} ===`);
+    const colorNames = ['红', '蓝', '绿', '黄', '紫'];
+    let matrixStr = "";
+    for (let r = 0; r < ROWS; r++) {
+        let rowArr = [];
+        for (let c = 0; c < COLS; c++) {
+            let gem = grid[r][c];
+            if (!gem) rowArr.push("空"); 
+            else if (gem.type === TYPE_MAGIC) rowArr.push("星");
+            else rowArr.push(colorNames[gem.colorIndex]);
+        }
+        matrixStr += rowArr.join(" \t") + "\n";
+    }
+    console.log(matrixStr);
+}
+
+/**
+ * 2. 核心配置与状态
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const ROWS = 8; const COLS = 8;
+// 护眼莫兰迪色系
+const COLORS = ['#e06c75', '#61afef', '#98c379', '#e5c07b', '#c678dd']; 
+const TYPE_NORMAL = 0, TYPE_LINE_H = 1, TYPE_LINE_V = 2, TYPE_BOMB = 3, TYPE_MAGIC = 4;
+
+let cellSize = 0;
+let grid = [];
+let dyingGems = []; 
+let particles = [];
+let score = 0;
+let currentCombo = 1;
+let gameState = 'IDLE'; 
+let swapContext = null; 
+let selectedGem = null;
+let screenShake = 0;
+
+const MAX_TIME = 120;
+let timeLeft = MAX_TIME;
+let lastTime = 0;
+let isGameOver = false;
+let isPaused = false;
+
+let effectStyle = 'shatter';
+let soundEnabled = true;
+
+/**
+ * 3. Web Audio API 音效引擎 (安全隔离)
+ */
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+
+function initAudio() {
+    if (!soundEnabled || !AudioContext) return;
+    try {
+        if (!audioCtx) audioCtx = new AudioContext();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch(e) { console.warn("Audio not supported"); }
+}
+
+function playTone(freq, type, duration, vol = 0.1) {
+    if (!soundEnabled || !audioCtx) return;
+    try {
+        let osc = audioCtx.createOscillator();
+        let gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + duration);
+    } catch(e) {}
+}
+
+const Sound = {
+    swap: () => playTone(400, 'sine', 0.1, 0.05),
+    invalid: () => playTone(150, 'sawtooth', 0.2, 0.05),
+    match: (combo) => {
+        let baseFreq = 440 + (combo * 50);
+        playTone(baseFreq, 'sine', 0.3, 0.1);
+        setTimeout(() => playTone(baseFreq * 1.5, 'sine', 0.4, 0.08), 100);
+    },
+    bomb: () => {
+        playTone(100, 'square', 0.5, 0.2);
+        playTone(50, 'sawtooth', 0.6, 0.2);
+    },
+    magic: () => {
+        for(let i=0; i<5; i++) setTimeout(() => playTone(600 + i*200, 'sine', 0.1, 0.1), i*50);
+    }
+};
+
+/**
+ * 4. 自动化测试模式
+ */
+let isTestMode = false;
+let testTimer = null;
+let testMoves = 0;
+
+function toggleTestMode() {
+    isTestMode = !isTestMode;
+    const btn = document.getElementById('test-btn');
+    if (isTestMode) {
+        btn.innerText = "停止"; btn.style.background = "#e5c07b";
+        testMoves = 0; selectedGem = null;
+        console.log("=== 测试模式已开启 ===");
+        runTestMode();
+    } else {
+        btn.innerText = "测试"; btn.style.background = "#c678dd";
+        clearTimeout(testTimer);
+        console.log("=== 测试模式已关闭 ===");
+    }
+}
+
+function runTestMode() {
+    if (!isTestMode) return;
+    if (testMoves >= 1000) {
+        toggleTestMode(); alert("✅ 已成功完成 1000 次自动消除测试！"); return;
+    }
+
+    if (gameState === 'IDLE' && !isPaused && !isGameOver) {
+        for(let r=0; r<ROWS; r++){
+            for(let c=0; c<COLS; c++){
+                if(!grid[r] || !grid[r][c]) {
+                    logGrid("❌ 异常状态 (发现空格子)");
+                    alert(`测试中断: 发现空格子在 (${r}, ${c})！`);
+                    toggleTestMode(); return;
+                }
+            }
+        }
+
+        let move = findValidMoveObj();
+        if (!move) {
+            logGrid("❌ 死局状态 (无步可走)");
+            alert("测试中断: 棋盘已死局！");
+            toggleTestMode(); return;
+        }
+
+        console.log(`[自动测试] 第 ${testMoves + 1} 步: 交换 (${move.r1},${move.c1}) 与 (${move.r2},${move.c2})`);
+        attemptSwap(grid[move.r1][move.c1], grid[move.r2][move.c2]);
+        testMoves++;
+    }
+    testTimer = setTimeout(runTestMode, 300);
+}
+
+function findValidMoveObj() {
+    let moves = [];
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if (!grid[r] || !grid[r][c]) continue;
+            if (grid[r][c].type === TYPE_MAGIC) {
+                if (c < COLS - 1) moves.push({r1:r, c1:c, r2:r, c2:c+1});
+                else if (r < ROWS - 1) moves.push({r1:r, c1:c, r2:r+1, c2:c});
+                continue;
+            }
+            if (c < COLS - 1) {
+                swap(r, c, r, c + 1);
+                if (checkMatches().gemsToRemove.length > 0) moves.push({r1:r, c1:c, r2:r, c2:c+1});
+                swap(r, c, r, c + 1);
+            }
+            if (r < ROWS - 1) {
+                swap(r, c, r + 1, c);
+                if (checkMatches().gemsToRemove.length > 0) moves.push({r1:r, c1:c, r2:r+1, c2:c});
+                swap(r, c, r + 1, c);
+            }
+        }
+    }
+    if (moves.length > 0) return moves[Math.floor(Math.random() * moves.length)];
+    return null;
+}
+
+function swap(r1, c1, r2, c2) {
+    let temp = grid[r1][c1]; grid[r1][c1] = grid[r2][c2]; grid[r2][c2] = temp;
+}
+
+/**
+ * 5. 粒子系统与宝石渲染 (狂热版视觉)
+ */
+class Particle {
+    constructor(x, y, color, style) {
+        this.x = x; this.y = y; this.color = color; this.style = style;
+        this.life = 1.0;
+        let angle = Math.random() * Math.PI * 2;
+        let speed = Math.random() * 4 + 2;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        this.size = Math.random() * (cellSize * 0.2) + 2;
+    }
+    update() {
+        this.x += this.vx; this.y += this.vy;
+        if (this.style === 'shatter') {
+            this.vy += 0.2; this.life -= 0.03;
+        } else {
+            this.vx *= 0.8; this.vy *= 0.8; this.life -= 0.05;
+        }
+    }
+    draw(ctx) {
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        if (this.style === 'shatter') ctx.fillRect(this.x, this.y, this.size, this.size);
+        else { ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.fill(); }
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+function spawnParticles(x, y, color) {
+    let count = effectStyle === 'shatter' ? 15 : 8;
+    for(let i=0; i<count; i++) particles.push(new Particle(x + cellSize/2, y + cellSize/2, color, effectStyle));
+}
+
+class Gem {
+    constructor(r, c, colorIndex, type = TYPE_NORMAL) {
+        this.r = r; this.c = c; this.colorIndex = colorIndex; this.color = COLORS[colorIndex]; this.type = type;
+        this.x = c * cellSize; this.y = r * cellSize;
+        this.targetX = this.x; this.targetY = this.y;
+        this.scale = 1; this.isDying = false;
+        this.animTick = Math.random() * 100;
+        this.particlesSpawned = false;
+    }
+    update() {
+        this.animTick += 0.1;
+        let dx = this.targetX - this.x; let dy = this.targetY - this.y;
+        this.x += dx * 0.3; this.y += dy * 0.3;
+        if (this.isDying) {
+            this.scale = Math.max(0, this.scale - 0.2);
+            if (this.scale <= 0.1 && !this.particlesSpawned) {
+                spawnParticles(this.x, this.y, this.color);
+                this.particlesSpawned = true;
+            }
+        }
+        return Math.abs(dx) < 1 && Math.abs(dy) < 1;
+    }
+    
+    drawShape(ctx, radius) {
+        ctx.beginPath();
+        if (this.colorIndex === 0) { // 红 - 六边形
+            for (let i = 0; i < 6; i++) {
+                let angle = i * Math.PI / 3;
+                ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+            }
+        } else if (this.colorIndex === 1) { // 蓝 - 菱形
+            ctx.moveTo(0, -radius); ctx.lineTo(radius, 0); ctx.lineTo(0, radius); ctx.lineTo(-radius, 0);
+        } else if (this.colorIndex === 2) { // 绿 - 圆角方块
+            let r = radius * 0.8; ctx.roundRect(-r, -r, r*2, r*2, 8);
+        } else if (this.colorIndex === 3) { // 黄 - 三角形
+            ctx.moveTo(0, -radius); ctx.lineTo(radius*0.866, radius*0.5); ctx.lineTo(-radius*0.866, radius*0.5);
+        } else if (this.colorIndex === 4) { // 紫 - 圆环
+            ctx.arc(0, 0, radius, 0, Math.PI*2);
+        }
+        ctx.closePath();
+    }
+
+    draw(ctx) {
+        if (this.scale <= 0 || isNaN(this.x) || isNaN(this.y)) return;
+        ctx.save();
+        ctx.translate(this.x + cellSize / 2, this.y + cellSize / 2);
+        ctx.scale(this.scale, this.scale);
+        let radius = cellSize * 0.38;
+        
+        if (this.type === TYPE_MAGIC) {
+            ctx.rotate(this.animTick * 0.5);
+            let gradient = ctx.createConicGradient(0, 0, 0);
+            COLORS.forEach((c, i) => gradient.addColorStop(i / COLORS.length, c));
+            gradient.addColorStop(1, COLORS[0]);
+            ctx.beginPath();
+            for(let i=0; i<10; i++) {
+                let r = i%2===0 ? radius : radius*0.5;
+                let a = i * Math.PI / 5;
+                ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+            }
+            ctx.fillStyle = gradient; ctx.fill();
+            ctx.shadowColor = '#fff'; ctx.shadowBlur = 10;
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0,0, radius*0.3, 0, Math.PI*2); ctx.fill();
+        } else {
+            ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 4; ctx.shadowOffsetY = 2;
+            let grad = ctx.createLinearGradient(-radius, -radius, radius, radius);
+            grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.3, this.color); grad.addColorStop(1, '#282c34');
+            ctx.fillStyle = grad;
+            
+            this.drawShape(ctx, radius); ctx.fill();
+            
+            if (this.colorIndex === 4) {
+                ctx.fillStyle = '#1e2227'; ctx.beginPath(); ctx.arc(0,0, radius*0.4, 0, Math.PI*2); ctx.fill();
+            }
+
+            let glow = (Math.sin(this.animTick) + 1) / 2; 
+            ctx.shadowBlur = 0;
+            if (this.type === TYPE_LINE_H || this.type === TYPE_LINE_V) {
+                ctx.strokeStyle = `rgba(255,255,255,${0.5 + glow*0.5})`; ctx.lineWidth = 4;
+                ctx.beginPath();
+                if (this.type === TYPE_LINE_H) { ctx.moveTo(-radius*0.8, 0); ctx.lineTo(radius*0.8, 0); }
+                else { ctx.moveTo(0, -radius*0.8); ctx.lineTo(0, radius*0.8); }
+                ctx.stroke();
+            } else if (this.type === TYPE_BOMB) {
+                ctx.fillStyle = `rgba(255, 50, 50, ${0.6 + glow*0.4})`;
+                ctx.beginPath(); ctx.arc(0, 0, radius * 0.5, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-radius*0.15, -radius*0.15, radius*0.15, 0, Math.PI*2); ctx.fill();
+            }
+        }
+        ctx.restore();
+    }
+}
+
+/**
+ * 6. 核心逻辑与精准尺寸计算
+ */
+function resize() {
+    let wrapper = document.getElementById('canvas-wrapper');
+    let w = wrapper.clientWidth; let h = wrapper.clientHeight;
+    if (!w || w === 0) w = window.innerWidth;
+    if (!h || h === 0) h = window.innerHeight - 120; 
+    
+    let size = Math.min(w, h) - 20;
+    if (isNaN(size) || size < 100) size = 300; 
+    
+    canvas.width = size; canvas.height = size; cellSize = size / COLS;
+    
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if (grid[r] && grid[r][c]) {
+                grid[r][c].targetX = c * cellSize; grid[r][c].targetY = r * cellSize;
+                grid[r][c].x = grid[r][c].targetX; grid[r][c].y = grid[r][c].targetY;
+            }
+        }
+    }
+}
+window.addEventListener('resize', resize);
+
+function initGrid() {
+    let attempts = 0;
+    do {
+        grid = []; dyingGems = []; particles = []; currentCombo = 1; updateComboUI();
+        for (let r = 0; r < ROWS; r++) {
+            grid[r] = [];
+            for (let c = 0; c < COLS; c++) {
+                let colorIdx;
+                do { colorIdx = Math.floor(Math.random() * 5); } 
+                while (
+                    (c >= 2 && grid[r][c-1] && grid[r][c-1].colorIndex === colorIdx && grid[r][c-2] && grid[r][c-2].colorIndex === colorIdx) ||
+                    (r >= 2 && grid[r-1] && grid[r-1][c].colorIndex === colorIdx && grid[r-2] && grid[r-2][c].colorIndex === colorIdx)
+                );
+                grid[r][c] = new Gem(r, c, colorIdx);
+            }
+        }
+        attempts++;
+        if(attempts > 50) break; 
+    } while (!findValidMoveObj()); 
+    logGrid("初始化棋盘");
+}
+
+function resetGame() {
+    score = 0; document.getElementById('score').innerText = score;
+    timeLeft = MAX_TIME; isGameOver = false; isPaused = false;
+    gameState = 'IDLE'; selectedGem = null; swapContext = null;
+    document.getElementById('gameover-modal').style.display = 'none';
+    document.getElementById('settings-modal').style.display = 'none';
+    initGrid();
+    lastTime = performance.now();
+}
+
+function updateComboUI() {
+    let comboEl = document.getElementById('combo-display');
+    if (currentCombo > 1) {
+        comboEl.innerText = `${currentCombo} 连击!`;
+        comboEl.style.transform = `scale(${Math.min(1.5, 1 + currentCombo * 0.1)})`;
+    } else {
+        comboEl.innerText = ""; comboEl.style.transform = "scale(1)";
+    }
+}
+
+function checkMatches() {
+    let hMatches = []; let vMatches = [];
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS - 2; c++) {
+            if (!grid[r][c] || grid[r][c].type === TYPE_MAGIC) continue; 
+            let color = grid[r][c].colorIndex; let len = 1;
+            while (c + len < COLS && grid[r][c + len] && grid[r][c + len].colorIndex === color && grid[r][c + len].type !== TYPE_MAGIC) len++;
+            if (len >= 3) {
+                let match = []; for (let i = 0; i < len; i++) match.push(grid[r][c + i]);
+                hMatches.push(match); c += len - 1;
+            }
+        }
+    }
+    for (let c = 0; c < COLS; c++) {
+        for (let r = 0; r < ROWS - 2; r++) {
+            if (!grid[r][c] || grid[r][c].type === TYPE_MAGIC) continue;
+            let color = grid[r][c].colorIndex; let len = 1;
+            while (r + len < ROWS && grid[r + len][c] && grid[r + len][c].colorIndex === color && grid[r + len][c].type !== TYPE_MAGIC) len++;
+            if (len >= 3) {
+                let match = []; for (let i = 0; i < len; i++) match.push(grid[r + i][c]);
+                vMatches.push(match); r += len - 1;
+            }
+        }
+    }
+
+    let gemsToRemove = new Set(); let specialsToSpawn = [];
+    let usedInBomb = new Set();
+    hMatches.forEach(hMatch => {
+        vMatches.forEach(vMatch => {
+            let intersection = hMatch.find(hg => vMatch.includes(hg));
+            if (intersection) {
+                hMatch.forEach(g => { gemsToRemove.add(g); usedInBomb.add(g); });
+                vMatch.forEach(g => { gemsToRemove.add(g); usedInBomb.add(g); });
+                specialsToSpawn.push({ r: intersection.r, c: intersection.c, colorIndex: intersection.colorIndex, type: TYPE_BOMB });
+            }
+        });
+    });
+
+    [...hMatches, ...vMatches].forEach(match => {
+        let isH = hMatches.includes(match);
+        let validGems = match.filter(g => !usedInBomb.has(g));
+        if (validGems.length === 0) return;
+        match.forEach(g => gemsToRemove.add(g));
+        if (match.length >= 5) {
+            let spawnGem = match[Math.floor(match.length / 2)];
+            specialsToSpawn.push({ r: spawnGem.r, c: spawnGem.c, colorIndex: spawnGem.colorIndex, type: TYPE_MAGIC });
+        } else if (match.length === 4) {
+            let spawnGem = match[Math.floor(match.length / 2)];
+            specialsToSpawn.push({ r: spawnGem.r, c: spawnGem.c, colorIndex: spawnGem.colorIndex, type: isH ? TYPE_LINE_V : TYPE_LINE_H });
+        }
+    });
+    return { gemsToRemove: Array.from(gemsToRemove), specialsToSpawn };
+}
+
+function processMatches(matchData) {
+    let initialGems = matchData.gemsToRemove || matchData;
+    if (initialGems.length === 0) return false;
+    
+    gameState = 'DESTROYING'; 
+    
+    let baseScore = initialGems.length * 10;
+    let multiplier = 1 + (currentCombo - 1) * 0.5;
+    score += Math.floor(baseScore * multiplier);
+    document.getElementById('score').innerText = score;
+    
+    timeLeft = Math.min(MAX_TIME, timeLeft + 1 + (currentCombo - 1) * 0.5);
+
+    let queue = [...initialGems];
+    let destroyed = new Set();
+    let hasBomb = false, hasMagic = false;
+
+    while (queue.length > 0) {
+        let gem = queue.shift();
+        if (!gem || destroyed.has(gem)) continue;
+        destroyed.add(gem);
+
+        if (gem.type === TYPE_LINE_H) {
+            for (let c = 0; c < COLS; c++) if (grid[gem.r][c]) queue.push(grid[gem.r][c]);
+        } else if (gem.type === TYPE_LINE_V) {
+            for (let r = 0; r < ROWS; r++) if (grid[r][gem.c]) queue.push(grid[r][gem.c]);
+        } else if (gem.type === TYPE_BOMB) {
+            hasBomb = true;
+            for (let r = gem.r - 1; r <= gem.r + 1; r++) {
+                for (let c = gem.c - 1; c <= gem.c + 1; c++) {
+                    if (r >= 0 && r < ROWS && c >= 0 && c < COLS && grid[r][c]) queue.push(grid[r][c]);
+                }
+            }
+        } else if (gem.type === TYPE_MAGIC) {
+            hasMagic = true;
+            let randomColor = Math.floor(Math.random() * 5);
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (grid[r][c] && grid[r][c].colorIndex === randomColor) queue.push(grid[r][c]);
+                }
+            }
+        }
+    }
+
+    if (hasMagic) { Sound.magic(); screenShake = 15; timeLeft = Math.min(MAX_TIME, timeLeft + 3); }
+    else if (hasBomb) { Sound.bomb(); screenShake = 10; timeLeft = Math.min(MAX_TIME, timeLeft + 2); }
+    else { Sound.match(currentCombo); }
+
+    destroyed.forEach(gem => {
+        if (!gem.isDying) { 
+            gem.isDying = true; 
+            dyingGems.push(gem);
+            grid[gem.r][gem.c] = null; 
+        }
+    });
+
+    if (matchData.specialsToSpawn) {
+        matchData.specialsToSpawn.forEach(sp => {
+            grid[sp.r][sp.c] = new Gem(sp.r, sp.c, sp.colorIndex, sp.type);
+            dyingGems.forEach(g => { if(g.r === sp.r && g.c === sp.c) g.scale = 0; }); 
+        });
+    }
+    
+    logGrid("发生消除");
+    return true;
+}
+
+function applyGravity() {
+    for (let c = 0; c < COLS; c++) {
+        let emptySlots = 0;
+        for (let r = ROWS - 1; r >= 0; r--) {
+            if (grid[r][c] === null) emptySlots++;
+            else if (emptySlots > 0) {
+                let gem = grid[r][c];
+                grid[r + emptySlots][c] = gem; grid[r][c] = null;
+                gem.r = r + emptySlots; gem.targetY = gem.r * cellSize;
+            }
+        }
+        for (let i = 0; i < emptySlots; i++) {
+            let colorIdx = Math.floor(Math.random() * 5);
+            let newGem = new Gem(i, c, colorIdx);
+            newGem.y = (i - emptySlots) * cellSize; newGem.targetY = i * cellSize;
+            grid[i][c] = newGem;
+        }
+    }
+    gameState = 'ANIMATING';
+}
+
+function attemptSwap(gem1, gem2, isReverting = false) {
+    gameState = 'SWAPPING';
+    swapContext = { gem1, gem2, isReverting };
+    if (!isReverting) Sound.swap();
+    
+    grid[gem1.r][gem1.c] = gem2; grid[gem2.r][gem2.c] = gem1;
+    let tempR = gem1.r, tempC = gem1.c;
+    gem1.r = gem2.r; gem1.c = gem2.c; gem2.r = tempR; gem2.c = tempC;
+    gem1.targetX = gem1.c * cellSize; gem1.targetY = gem1.r * cellSize;
+    gem2.targetX = gem2.c * cellSize; gem2.targetY = gem2.r * cellSize;
+}
+
+function handleMagicSwap(gem1, gem2) {
+    let magicGem = gem1.type === TYPE_MAGIC ? gem1 : gem2;
+    let targetGem = gem1.type === TYPE_MAGIC ? gem2 : gem1;
+    let gemsToRemove = [magicGem];
+    
+    if (gem1.type === TYPE_MAGIC && gem2.type === TYPE_MAGIC) {
+        for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(grid[r][c]) gemsToRemove.push(grid[r][c]);
+    } else {
+        for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(grid[r][c] && grid[r][c].colorIndex === targetGem.colorIndex) gemsToRemove.push(grid[r][c]);
+    }
+    processMatches({ gemsToRemove: gemsToRemove, specialsToSpawn: [] });
+}
+
+/**
+ * 7. 精准触摸定位算法
+ */
+let startX = 0, startY = 0, startGem = null;
+
+function getEventPos(e) {
+    if (e.changedTouches && e.changedTouches.length > 0) {
+        return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+    }
+    return { x: e.clientX, y: e.clientY };
+}
+
+function getGridPos(x, y) {
+    let rect = canvas.getBoundingClientRect();
+    let scaleX = canvas.width / rect.width;
+    let scaleY = canvas.height / rect.height;
+    
+    let c = Math.floor(((x - rect.left) * scaleX) / cellSize); 
+    let r = Math.floor(((y - rect.top) * scaleY) / cellSize);
+    if (r >= 0 && r < ROWS && c >= 0 && c < COLS) return {r, c};
+    return null;
+}
+
+function handlePointerDown(e) {
+    initAudio(); 
+    if (gameState !== 'IDLE' || isPaused || isGameOver || isTestMode) return; 
+    let pos = getEventPos(e);
+    let gridPos = getGridPos(pos.x, pos.y);
+    if (!gridPos) return;
+    startGem = grid[gridPos.r][gridPos.c];
+    startX = pos.x; startY = pos.y;
+}
+
+function handlePointerUp(e) {
+    if (gameState !== 'IDLE' || !startGem || isPaused || isGameOver || isTestMode) return;
+    let pos = getEventPos(e);
+    let dx = pos.x - startX; let dy = pos.y - startY;
+    let targetGem = null;
+
+    if (Math.abs(dx) > 30 || Math.abs(dy) > 30) {
+        let r = startGem.r; let c = startGem.c;
+        if (Math.abs(dx) > Math.abs(dy)) c += dx > 0 ? 1 : -1; else r += dy > 0 ? 1 : -1;
+        if (r >= 0 && r < ROWS && c >= 0 && c < COLS) targetGem = grid[r][c];
+    } else {
+        let gridPos = getGridPos(pos.x, pos.y);
+        if (gridPos) {
+            if (selectedGem) {
+                let isAdjacent = Math.abs(selectedGem.r - gridPos.r) + Math.abs(selectedGem.c - gridPos.c) === 1;
+                if (isAdjacent) { targetGem = grid[gridPos.r][gridPos.c]; startGem = selectedGem; } 
+                else { selectedGem = grid[gridPos.r][gridPos.c]; startGem = null; return; }
+            } else { selectedGem = grid[gridPos.r][gridPos.c]; startGem = null; return; }
+        }
+    }
+    if (targetGem && startGem) { 
+        selectedGem = null; currentCombo = 1; updateComboUI();
+        attemptSwap(startGem, targetGem); 
+    }
+    startGem = null;
+}
+
+canvas.addEventListener('mousedown', handlePointerDown);
+window.addEventListener('mouseup', handlePointerUp);
+canvas.addEventListener('touchstart', handlePointerDown, {passive: false});
+window.addEventListener('touchend', handlePointerUp, {passive: false});
+canvas.addEventListener('touchmove', (e) => { e.preventDefault(); }, {passive: false});
+
+function showSettings() { isPaused = true; document.getElementById('settings-modal').style.display = 'flex'; }
+function closeSettings() {
+    soundEnabled = document.getElementById('sound-toggle').checked;
+    effectStyle = document.getElementById('effect-style').value;
+    document.getElementById('settings-modal').style.display = 'none';
+    isPaused = false; lastTime = performance.now(); 
+}
+
+/**
+ * 8. 纯帧驱动主循环
+ */
+function gameLoop(now) {
+    if (!isPaused && !isGameOver) {
+        let dt = (now - lastTime) / 1000;
+        timeLeft -= dt;
+        if (timeLeft <= 0) {
+            timeLeft = 0; isGameOver = true;
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('gameover-modal').style.display = 'flex';
+        }
+        let percent = (timeLeft / MAX_TIME) * 100;
+        let timeFill = document.getElementById('time-bar-fill');
+        timeFill.style.width = `${percent}%`;
+        timeFill.style.background = percent < 20 ? '#e06c75' : 'linear-gradient(90deg, #e5c07b, #e06c75)';
+    }
+    lastTime = now;
+
+    ctx.save();
+    if (screenShake > 0) {
+        let dx = (Math.random() - 0.5) * screenShake;
+        let dy = (Math.random() - 0.5) * screenShake;
+        ctx.translate(dx, dy);
+        screenShake *= 0.9; 
+        if (screenShake < 0.5) screenShake = 0;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if ((r + c) % 2 === 0) ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+        }
+    }
+
+    if (selectedGem && gameState === 'IDLE') {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.fillRect(selectedGem.c * cellSize, selectedGem.r * cellSize, cellSize, cellSize);
+    }
+
+    let isAnimating = false; let isDestroying = false;
+
+    for (let i = dyingGems.length - 1; i >= 0; i--) {
+        let gem = dyingGems[i];
+        gem.update(); gem.draw(ctx);
+        if (gem.scale > 0) isDestroying = true;
+        else dyingGems.splice(i, 1); 
+    }
+
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if (grid[r][c]) {
+                if (!grid[r][c].update()) isAnimating = true;
+                grid[r][c].draw(ctx);
+            }
+        }
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update(); particles[i].draw(ctx);
+        if (particles[i].life <= 0) particles.splice(i, 1);
+    }
+
+    if (!isAnimating && !isDestroying && !isPaused && !isGameOver) {
+        if (gameState === 'SWAPPING') {
+            if (!swapContext.isReverting) {
+                if (swapContext.gem1.type === TYPE_MAGIC || swapContext.gem2.type === TYPE_MAGIC) {
+                    handleMagicSwap(swapContext.gem1, swapContext.gem2);
+                } else {
+                    let matchData = checkMatches();
+                    if (matchData.gemsToRemove.length > 0) {
+                        processMatches(matchData);
+                    } else {
+                        Sound.invalid();
+                        attemptSwap(swapContext.gem1, swapContext.gem2, true);
+                    }
+                }
+            } else {
+                gameState = 'IDLE'; 
+            }
+        } 
+        else if (gameState === 'DESTROYING') {
+            applyGravity(); 
+        }
+        else if (gameState === 'ANIMATING') {
+            let matchData = checkMatches();
+            if (matchData.gemsToRemove.length > 0) {
+                currentCombo++; updateComboUI();
+                processMatches(matchData); 
+            } else {
+                gameState = 'IDLE'; 
+                
+                if (!findValidMoveObj()) {
+                    alert("没有可消除的啦！系统已为您重新洗牌。");
+                    initGrid(); lastTime = performance.now();
+                }
+            }
+        }
+    }
+
+    ctx.restore();
+    requestAnimationFrame(gameLoop);
+}
+
+// 直接启动，不依赖 onload
+resize();
+resetGame();
+requestAnimationFrame(gameLoop);
+
+</script>
+</body>
+</html>
