@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>水晶消消乐 - 爽快解谜版</title>
+    <title>水晶消消乐 - 动态平衡版</title>
     <style>
         :root {
             --bg-color: #181a1f; --panel-bg: #21252b; --board-bg: #1e2227;
@@ -223,6 +223,9 @@ let iceLeft = 0;
 let isPaused = true; 
 let msgAction = null;
 
+// 核心机制：连败补偿计数器
+let failCount = 0; 
+
 /**
  * 3. 音效与震动引擎
  */
@@ -358,17 +361,15 @@ function swap(r1, c1, r2, c2) {
 }
 
 /**
- * 5. 核心重构：经典连片阵型库与宽容步数
+ * 5. 核心重构：平滑阵型与动态失败补偿 (DDA)
  */
 const ICE_PATTERNS = [
-    [[3,3],[3,4],[4,3],[4,4]], // 0: 中心 2x2 (4块)
-    [[2,3],[2,4],[3,2],[3,3],[3,4],[3,5],[4,2],[4,3],[4,4],[4,5],[5,3],[5,4]], // 1: 十字阵 (12块)
-    [[2,2],[2,3],[2,4],[2,5],[3,2],[3,3],[3,4],[3,5],[4,2],[4,3],[4,4],[4,5],[5,2],[5,3],[5,4],[5,5]], // 2: 中心 4x4 (16块)
-    [[1,2],[1,3],[1,4],[1,5],[6,2],[6,3],[6,4],[6,5],[2,1],[3,1],[4,1],[5,1],[2,6],[3,6],[4,6],[5,6]], // 3: 回字框 (16块)
-    [[1,1],[1,2],[2,1],[2,2], [5,5],[5,6],[6,5],[6,6], [1,5],[1,6],[2,5],[2,6], [5,1],[5,2],[6,1],[6,2]], // 4: 四角块 (16块)
-    [[2,1],[2,2],[2,3],[2,4],[2,5],[2,6],[5,1],[5,2],[5,3],[5,4],[5,5],[5,6]], // 5: 双横条 (12块)
-    [[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[1,5],[2,5],[3,5],[4,5],[5,5],[6,5]], // 6: 双竖条 (12块)
-    [[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[4,1],[4,2],[4,3],[4,4],[4,5],[4,6]]  // 7: 中心腰带 (12块)
+    [[3,3],[3,4],[4,3],[4,4]], // 1关: 中心 2x2 (4块)
+    [[2,3],[2,4],[5,3],[5,4],[3,2],[4,2],[3,5],[4,5]], // 2关: 空心框 (8块)
+    [[2,3],[2,4],[3,2],[3,3],[3,4],[3,5],[4,2],[4,3],[4,4],[4,5],[5,3],[5,4]], // 3关: 十字阵 (12块)
+    [[2,2],[2,3],[2,4],[2,5],[3,2],[3,3],[3,4],[3,5],[4,2],[4,3],[4,4],[4,5],[5,2],[5,3],[5,4],[5,5]], // 4关: 中心 4x4 (16块)
+    [[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[1,5],[2,5],[3,5],[4,5],[5,5],[6,5]], // 5关: 双竖条 (12块)
+    [[2,1],[2,2],[2,3],[2,4],[2,5],[2,6],[5,1],[5,2],[5,3],[5,4],[5,5],[5,6]]  // 6关: 双横条 (12块)
 ];
 
 function generateLevelData(lvl) {
@@ -376,18 +377,34 @@ function generateLevelData(lvl) {
     for(let r=0; r<ROWS; r++) { iceGrid[r] = new Array(COLS).fill(0); }
     let iceCount = 0;
     
-    // 循环使用经典阵型，保证绝对有解且连片
-    let patternIndex = (lvl - 1) % ICE_PATTERNS.length;
-    let pattern = ICE_PATTERNS[patternIndex];
+    // 前 6 关使用固定平滑阵型，之后随机对称阵型
+    if (lvl <= 6) {
+        let pattern = ICE_PATTERNS[lvl - 1];
+        pattern.forEach(c => { iceGrid[c[0]][c[1]] = 1; iceCount++; });
+    } else {
+        let targetIce = Math.min(32, 12 + Math.floor(lvl * 1.2));
+        let quadrant = [];
+        for(let i=0; i<16; i++) quadrant.push(i);
+        quadrant.sort(() => 0.5 - Math.random()); 
+        
+        let pointsToPick = Math.ceil(targetIce / 4);
+        for(let i=0; i<pointsToPick; i++) {
+            let val = quadrant[i];
+            let r = Math.floor(val / 4); let c = val % 4;
+            if ((r===0&&c===0) || (r===0&&c===7) || (r===7&&c===0) || (r===7&&c===7)) continue;
+            iceGrid[r][c] = 1; iceGrid[r][7-c] = 1; iceGrid[7-r][c] = 1; iceGrid[7-r][7-c] = 1; 
+        }
+        for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(iceGrid[r][c]===1) iceCount++;
+    }
     
-    pattern.forEach(c => { iceGrid[c[0]][c[1]] = 1; iceCount++; });
+    // 宽容的步数公式
+    let baseMoves = iceCount + 15 - Math.floor(lvl / 3);
+    if (baseMoves < iceCount + 5) baseMoves = iceCount + 5; 
     
-    // 极其宽容的步数公式：冰块数 + 15 - (关卡数/3)
-    // 保证前期步数极多，后期缓慢收紧，但绝不苛刻
-    let moves = iceCount + 15 - Math.floor(lvl / 3);
-    if (moves < iceCount + 5) moves = iceCount + 5; // 绝对保底步数
+    // 核心机制：失败补偿！每次失败，下次重玩多给 5 步
+    let finalMoves = baseMoves + (failCount * 5);
     
-    return { moves: moves, ice: iceCount };
+    return { moves: finalMoves, ice: iceCount };
 }
 
 function updateUI() {
@@ -412,7 +429,11 @@ function updateUI() {
 function showStartModal() {
     isPaused = true;
     document.getElementById('start-level-title').innerText = `第 ${level} 关`;
-    document.getElementById('start-moves-count').innerText = movesLeft;
+    
+    // 如果触发了失败补偿，给玩家提示
+    let extraText = failCount > 0 ? ` (已获得系统援助 +${failCount * 5} 步)` : "";
+    document.getElementById('start-moves-count').innerText = movesLeft + extraText;
+    
     document.getElementById('start-ice-count').innerText = iceLeft;
     document.getElementById('start-modal').style.display = 'flex';
 }
@@ -597,7 +618,7 @@ function initGrid() {
 }
 
 function resetGame(fullReset = false) {
-    if (fullReset) { level = 1; score = 0; }
+    if (fullReset) { level = 1; score = 0; failCount = 0; }
     let levelData = generateLevelData(level);
     movesLeft = levelData.moves;
     iceLeft = levelData.ice;
@@ -747,9 +768,6 @@ function processMatches(matchData) {
     return true;
 }
 
-/**
- * 6. 强化发牌员：步数 <= 8 时，50% 概率掉落急需颜色
- */
 function getSmartColor() {
     if (movesLeft <= 8) {
         let neededColors = [];
@@ -878,10 +896,11 @@ window.addEventListener('touchend', handlePointerUp, {passive: false});
 canvas.addEventListener('touchmove', (e) => { e.preventDefault(); }, {passive: false});
 
 /**
- * 胜负判定
+ * 胜负判定 (包含失败补偿逻辑)
  */
 function checkWinLose() {
     if (iceLeft <= 0) {
+        failCount = 0; // 过关清零失败次数
         showMsg("🎉 完美过关！", `太棒了！您打破了第 ${level} 关的所有冰块。`, "下一关", () => {
             level++; resetGame(false);
         }, true);
@@ -889,7 +908,8 @@ function checkWinLose() {
     }
     
     if (movesLeft <= 0) {
-        showMsg("💔 步数耗尽", "很遗憾，您没有在规定步数内打破所有冰块。\n（提示：多合成炸弹和直线特效！）", "重新挑战", () => {
+        failCount++; // 失败次数+1，下次多给5步
+        showMsg("💔 步数耗尽", "很遗憾，您没有在规定步数内打破所有冰块。\n（系统已为您准备了额外步数援助！）", "重新挑战", () => {
             resetGame(false); 
         }, false);
         return true;
