@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>水晶消消乐 - 终极平衡版</title>
+    <title>水晶消消乐 - 爽快解谜版</title>
     <style>
         :root {
             --bg-color: #181a1f; --panel-bg: #21252b; --board-bg: #1e2227;
@@ -358,15 +358,17 @@ function swap(r1, c1, r2, c2) {
 }
 
 /**
- * 5. 核心重构：平滑难度曲线与对称阵型生成器
+ * 5. 核心重构：经典连片阵型库与宽容步数
  */
 const ICE_PATTERNS = [
-    [[3,3],[3,4],[4,3],[4,4]], // 0: 基础 2x2
-    [[1,3],[1,4],[2,3],[2,4],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[4,1],[4,2],[4,3],[4,4],[4,5],[4,6],[5,3],[5,4],[6,3],[6,4]], // 1: 十字阵
-    [[1,1],[1,6],[2,2],[2,5],[3,3],[3,4],[4,3],[4,4],[5,2],[5,5],[6,1],[6,6]], // 2: X 型阵
-    [[2,2],[2,3],[2,4],[2,5],[3,2],[3,5],[4,2],[4,5],[5,2],[5,3],[5,4],[5,5]], // 3: 空心方阵
-    [[1,1],[1,2],[2,1],[1,5],[1,6],[2,6],[5,1],[6,1],[6,2],[5,6],[6,5],[6,6]], // 4: 四角星阵
-    [[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[1,5],[2,5],[3,5],[4,5],[5,5],[6,5]]  // 5: 竖条阵
+    [[3,3],[3,4],[4,3],[4,4]], // 0: 中心 2x2 (4块)
+    [[2,3],[2,4],[3,2],[3,3],[3,4],[3,5],[4,2],[4,3],[4,4],[4,5],[5,3],[5,4]], // 1: 十字阵 (12块)
+    [[2,2],[2,3],[2,4],[2,5],[3,2],[3,3],[3,4],[3,5],[4,2],[4,3],[4,4],[4,5],[5,2],[5,3],[5,4],[5,5]], // 2: 中心 4x4 (16块)
+    [[1,2],[1,3],[1,4],[1,5],[6,2],[6,3],[6,4],[6,5],[2,1],[3,1],[4,1],[5,1],[2,6],[3,6],[4,6],[5,6]], // 3: 回字框 (16块)
+    [[1,1],[1,2],[2,1],[2,2], [5,5],[5,6],[6,5],[6,6], [1,5],[1,6],[2,5],[2,6], [5,1],[5,2],[6,1],[6,2]], // 4: 四角块 (16块)
+    [[2,1],[2,2],[2,3],[2,4],[2,5],[2,6],[5,1],[5,2],[5,3],[5,4],[5,5],[5,6]], // 5: 双横条 (12块)
+    [[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[1,5],[2,5],[3,5],[4,5],[5,5],[6,5]], // 6: 双竖条 (12块)
+    [[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[4,1],[4,2],[4,3],[4,4],[4,5],[4,6]]  // 7: 中心腰带 (12块)
 ];
 
 function generateLevelData(lvl) {
@@ -374,36 +376,16 @@ function generateLevelData(lvl) {
     for(let r=0; r<ROWS; r++) { iceGrid[r] = new Array(COLS).fill(0); }
     let iceCount = 0;
     
-    if (lvl === 1) {
-        ICE_PATTERNS[0].forEach(c => { iceGrid[c[0]][c[1]] = 1; iceCount++; });
-    } else if (lvl === 2) {
-        ICE_PATTERNS[4].forEach(c => { iceGrid[c[0]][c[1]] = 1; iceCount++; });
-    } else if (lvl === 3) {
-        ICE_PATTERNS[1].forEach(c => { iceGrid[c[0]][c[1]] = 1; iceCount++; });
-    } else {
-        let targetIce = Math.min(36, 12 + Math.floor(lvl * 1.5));
-        let quadrant = [];
-        for(let i=0; i<16; i++) quadrant.push(i);
-        quadrant.sort(() => 0.5 - Math.random()); 
-        
-        let pointsToPick = Math.ceil(targetIce / 4);
-        for(let i=0; i<pointsToPick; i++) {
-            let val = quadrant[i];
-            let r = Math.floor(val / 4); let c = val % 4;
-            if ((r===0&&c===0) || (r===0&&c===7) || (r===7&&c===0) || (r===7&&c===7)) continue;
-            
-            iceGrid[r][c] = 1; iceGrid[r][7-c] = 1; iceGrid[7-r][c] = 1; iceGrid[7-r][7-c] = 1; 
-        }
-        for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(iceGrid[r][c]===1) iceCount++;
-    }
+    // 循环使用经典阵型，保证绝对有解且连片
+    let patternIndex = (lvl - 1) % ICE_PATTERNS.length;
+    let pattern = ICE_PATTERNS[patternIndex];
     
-    // 核心修复：收紧步数公式，逼迫玩家合成特效
-    let moves = Math.ceil(iceCount / 1.8) + 3; 
+    pattern.forEach(c => { iceGrid[c[0]][c[1]] = 1; iceCount++; });
     
-    // 新手保护
-    if (lvl === 1) moves = 15;
-    if (lvl === 2) moves = 18;
-    if (lvl === 3) moves = 20;
+    // 极其宽容的步数公式：冰块数 + 15 - (关卡数/3)
+    // 保证前期步数极多，后期缓慢收紧，但绝不苛刻
+    let moves = iceCount + 15 - Math.floor(lvl / 3);
+    if (moves < iceCount + 5) moves = iceCount + 5; // 绝对保底步数
     
     return { moves: moves, ice: iceCount };
 }
@@ -480,7 +462,6 @@ class Gem {
         this.animTick += 0.1;
         let dx = this.targetX - this.x; let dy = this.targetY - this.y;
         
-        // 核心修复：连击动态加速
         let speed = currentCombo >= 3 ? 0.45 : 0.3;
         this.x += dx * speed; this.y += dy * speed;
         
@@ -767,10 +748,10 @@ function processMatches(matchData) {
 }
 
 /**
- * 6. 核心修复：削弱发牌员 (35% 概率)
+ * 6. 强化发牌员：步数 <= 8 时，50% 概率掉落急需颜色
  */
 function getSmartColor() {
-    if (movesLeft <= 5) {
+    if (movesLeft <= 8) {
         let neededColors = [];
         for(let r=0; r<ROWS; r++) {
             for(let c=0; c<COLS; c++) {
@@ -779,8 +760,7 @@ function getSmartColor() {
                 }
             }
         }
-        // 概率从 70% 砍到 35%，保留一丝运气但不鼓励摆烂
-        if (neededColors.length > 0 && Math.random() < 0.35) {
+        if (neededColors.length > 0 && Math.random() < 0.5) {
             return neededColors[Math.floor(Math.random() * neededColors.length)];
         }
     }
