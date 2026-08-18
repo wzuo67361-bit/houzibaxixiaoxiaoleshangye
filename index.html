@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>水晶消消乐 - 动态平衡版</title>
+    <title>水晶消消乐 - 灵魂狂欢版</title>
     <style>
         :root {
             --bg-color: #181a1f; --panel-bg: #21252b; --board-bg: #1e2227;
@@ -67,16 +67,28 @@
         .btn:active { transform: scale(0.95); }
         .btn-test { background: #c678dd; }
         .btn-setting { background: #61afef; color: #181a1f; }
+        .btn-help { background: #98c379; color: #181a1f; }
 
         #canvas-wrapper { flex: 1; width: 100%; display: flex; justify-content: center; align-items: center; padding: 10px; position: relative; box-sizing: border-box; perspective: 1000px; }
         canvas { background: var(--board-bg); border-radius: 12px; box-shadow: inset 0 0 20px rgba(0,0,0,0.1); display: block; max-width: 100%; max-height: 100%; transition: 0.3s; }
         
         .modal { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--modal-overlay); justify-content: center; align-items: center; z-index: 20; backdrop-filter: blur(3px); transition: 0.3s; }
-        .modal-content { background: var(--panel-bg); padding: 30px; border-radius: 15px; text-align: center; border: 2px solid #61afef; width: 85%; max-width: 320px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); transition: 0.3s; }
+        .modal-content { background: var(--panel-bg); padding: 30px; border-radius: 15px; text-align: center; border: 2px solid #61afef; width: 85%; max-width: 340px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); transition: 0.3s; }
         .modal h2 { margin-bottom: 15px; font-size: 24px; color: var(--text-main); }
         
         .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 16px; color: var(--text-main); font-weight: bold; }
         select { padding: 8px; border-radius: 5px; background: var(--board-bg); color: var(--text-main); border: 1px solid var(--border-color); font-size: 14px; outline: none; }
+
+        /* 飘字动画 */
+        .floating-text { position: absolute; font-size: 22px; font-weight: bold; pointer-events: none; animation: floatUp 1.5s ease-out forwards; z-index: 15; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+        .floating-center { font-size: 36px; text-shadow: 0 4px 8px rgba(0,0,0,0.8); animation: popCenter 1.5s ease-out forwards; }
+        @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-50px) scale(1.3); } }
+        @keyframes popCenter { 0% { opacity: 0; transform: scale(0.5); } 20% { opacity: 1; transform: scale(1.2); } 80% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.5); } }
+
+        .help-item { display: flex; align-items: center; text-align: left; margin-bottom: 12px; background: var(--board-bg); padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); }
+        .help-icon { font-size: 24px; margin-right: 12px; min-width: 30px; text-align: center; }
+        .help-text-title { font-weight: bold; color: #61afef; font-size: 15px; margin-bottom: 4px; }
+        .help-text-desc { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
     </style>
 </head>
 <body>
@@ -108,12 +120,52 @@
     <div class="toolbar">
         <div class="score-text">分数: <span id="score" style="color:#98c379;">0</span></div>
         <div class="btn-group">
-            <button class="btn btn-test" id="test-btn" onclick="toggleTestMode()">自动测试</button>
+            <button class="btn btn-test" id="test-btn" onclick="toggleTestMode()">测试</button>
+            <button class="btn btn-help" onclick="showHelp()">❓ 玩法</button>
             <button class="btn btn-setting" onclick="showSettings()">⚙️ 设置</button>
         </div>
     </div>
 </div>
 
+<!-- 玩法说明弹窗 -->
+<div id="help-modal" class="modal">
+    <div class="modal-content" style="padding: 20px; max-height: 90vh; overflow-y: auto;">
+        <h2 style="color: #98c379; margin-bottom: 15px;">进阶玩法说明</h2>
+        
+        <div class="help-item">
+            <div class="help-icon">⚡</div>
+            <div>
+                <div class="help-text-title">连 4 个 = 闪电特效</div>
+                <div class="help-text-desc">消除时，击碎一整行或一整列的冰块！</div>
+            </div>
+        </div>
+        <div class="help-item">
+            <div class="help-icon">💣</div>
+            <div>
+                <div class="help-text-title">T/L 型 = 炸弹特效</div>
+                <div class="help-text-desc">消除时，引发大爆炸，震碎周围一圈冰块！</div>
+            </div>
+        </div>
+        <div class="help-item">
+            <div class="help-icon">🌈</div>
+            <div>
+                <div class="help-text-title" style="color: #c678dd;">连 5 个 = 彩虹魔法球</div>
+                <div class="help-text-desc">和旁边任意宝石交换，全盘同色瞬间清空！</div>
+            </div>
+        </div>
+        <div class="help-item" style="border-color: #e5c07b;">
+            <div class="help-icon">🔥</div>
+            <div>
+                <div class="help-text-title" style="color: #e5c07b;">终极技巧：特效组合！</div>
+                <div class="help-text-desc">把任意两个特效互换，会触发毁天灭地的组合神技！快去试试【彩虹+炸弹】吧！</div>
+            </div>
+        </div>
+
+        <button class="btn" style="width: 100%; margin-top: 10px; padding: 12px; background: #61afef; color: #181a1f;" onclick="closeHelp()">我明白了</button>
+    </div>
+</div>
+
+<!-- 设置弹窗 -->
 <div id="settings-modal" class="modal">
     <div class="modal-content">
         <h2 style="color: #61afef;">游戏设置</h2>
@@ -131,6 +183,7 @@
     </div>
 </div>
 
+<!-- 开局目标确认弹窗 -->
 <div id="start-modal" class="modal">
     <div class="modal-content">
         <h2 id="start-level-title" style="color: #61afef;">第 1 关</h2>
@@ -146,6 +199,7 @@
     </div>
 </div>
 
+<!-- 结算消息弹窗 -->
 <div id="msg-modal" class="modal">
     <div class="modal-content">
         <h2 id="msg-title" style="color: #98c379;">提示</h2>
@@ -182,7 +236,7 @@ function logGrid(actionName) {
             let gem = grid[r][c];
             let iceStr = iceGrid[r][c] > 0 ? "[冰]" : "";
             if (!gem) rowArr.push("空" + iceStr); 
-            else if (gem.type === TYPE_MAGIC) rowArr.push("星" + iceStr);
+            else if (gem.type === TYPE_MAGIC) rowArr.push("🌈" + iceStr);
             else rowArr.push(colorNames[gem.colorIndex] + iceStr);
         }
         matrixStr += rowArr.join(" \t") + "\n";
@@ -191,12 +245,36 @@ function logGrid(actionName) {
     console.log("=================================");
 }
 
+function showFloatingText(text, color, r, c, isCenter = false) {
+    let rect = canvas.getBoundingClientRect();
+    let el = document.createElement('div');
+    el.innerText = text;
+    el.style.color = color;
+    
+    if (isCenter) {
+        el.className = 'floating-text floating-center';
+        el.style.left = `50%`;
+        el.style.top = `40%`;
+        el.style.transform = `translate(-50%, -50%)`;
+    } else {
+        el.className = 'floating-text';
+        let x = rect.left + (c * cellSize) + (cellSize / 2) - 40;
+        let y = rect.top + (r * cellSize) + (cellSize / 2) - 20;
+        el.style.left = `${x}px`; el.style.top = `${y}px`;
+    }
+    
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1500);
+}
+
 function changeTheme() {
     const theme = document.getElementById('theme-select').value;
     document.body.className = theme === 'dark' ? '' : `theme-${theme}`;
 }
 function showSettings() { isPaused = true; document.getElementById('settings-modal').style.display = 'flex'; }
 function closeSettings() { document.getElementById('settings-modal').style.display = 'none'; isPaused = false; }
+function showHelp() { isPaused = true; document.getElementById('help-modal').style.display = 'flex'; }
+function closeHelp() { document.getElementById('help-modal').style.display = 'none'; isPaused = false; }
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -210,9 +288,11 @@ let grid = [];
 let iceGrid = []; 
 let dyingGems = []; 
 let particles = [];
+let lightnings = []; 
+let pendingMagicTargets = []; 
 let score = 0;
 let currentCombo = 1;
-let gameState = 'IDLE'; 
+let gameState = 'IDLE'; // IDLE, SWAPPING, MAGIC_EFFECT, DESTROYING, ANIMATING, BONUS_TIME
 let swapContext = null; 
 let selectedGem = null;
 let screenShake = 0;
@@ -222,9 +302,7 @@ let movesLeft = 20;
 let iceLeft = 0; 
 let isPaused = true; 
 let msgAction = null;
-
-// 核心机制：连败补偿计数器
-let failCount = 0; 
+let bonusTimer = 0; // 狂欢时间计时器
 
 /**
  * 3. 音效与震动引擎
@@ -273,8 +351,8 @@ const Sound = {
         triggerVibrate([30, 50, 30]);
     },
     magic: () => {
-        for(let i=0; i<5; i++) setTimeout(() => playTone(600 + i*200, 'sine', 0.1, 0.1), i*50);
-        triggerVibrate(50);
+        for(let i=0; i<8; i++) setTimeout(() => playTone(800 + i*100, 'sine', 0.1, 0.1), i*40);
+        triggerVibrate(80);
     }
 };
 
@@ -335,6 +413,13 @@ function findValidMoveObj() {
     for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
             if (!grid[r] || !grid[r][c]) continue;
+            
+            // 核心修复：测试模式识别特效组合
+            if (grid[r][c].type > 0) {
+                if (c < COLS - 1 && grid[r][c+1].type > 0) moves.push({r1:r, c1:c, r2:r, c2:c+1});
+                if (r < ROWS - 1 && grid[r+1][c].type > 0) moves.push({r1:r, c1:c, r2:r+1, c2:c});
+            }
+            
             if (grid[r][c].type === TYPE_MAGIC) {
                 if (c < COLS - 1) moves.push({r1:r, c1:c, r2:r, c2:c+1});
                 else if (r < ROWS - 1) moves.push({r1:r, c1:c, r2:r+1, c2:c});
@@ -361,15 +446,15 @@ function swap(r1, c1, r2, c2) {
 }
 
 /**
- * 5. 核心重构：平滑阵型与动态失败补偿 (DDA)
+ * 5. 关卡生成 (彻底删除失败补偿)
  */
 const ICE_PATTERNS = [
-    [[3,3],[3,4],[4,3],[4,4]], // 1关: 中心 2x2 (4块)
-    [[2,3],[2,4],[5,3],[5,4],[3,2],[4,2],[3,5],[4,5]], // 2关: 空心框 (8块)
-    [[2,3],[2,4],[3,2],[3,3],[3,4],[3,5],[4,2],[4,3],[4,4],[4,5],[5,3],[5,4]], // 3关: 十字阵 (12块)
-    [[2,2],[2,3],[2,4],[2,5],[3,2],[3,3],[3,4],[3,5],[4,2],[4,3],[4,4],[4,5],[5,2],[5,3],[5,4],[5,5]], // 4关: 中心 4x4 (16块)
-    [[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[1,5],[2,5],[3,5],[4,5],[5,5],[6,5]], // 5关: 双竖条 (12块)
-    [[2,1],[2,2],[2,3],[2,4],[2,5],[2,6],[5,1],[5,2],[5,3],[5,4],[5,5],[5,6]]  // 6关: 双横条 (12块)
+    [[3,3],[3,4],[4,3],[4,4]], 
+    [[2,3],[2,4],[5,3],[5,4],[3,2],[4,2],[3,5],[4,5]], 
+    [[2,3],[2,4],[3,2],[3,3],[3,4],[3,5],[4,2],[4,3],[4,4],[4,5],[5,3],[5,4]], 
+    [[2,2],[2,3],[2,4],[2,5],[3,2],[3,3],[3,4],[3,5],[4,2],[4,3],[4,4],[4,5],[5,2],[5,3],[5,4],[5,5]], 
+    [[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[1,5],[2,5],[3,5],[4,5],[5,5],[6,5]], 
+    [[2,1],[2,2],[2,3],[2,4],[2,5],[2,6],[5,1],[5,2],[5,3],[5,4],[5,5],[5,6]]  
 ];
 
 function generateLevelData(lvl) {
@@ -377,7 +462,6 @@ function generateLevelData(lvl) {
     for(let r=0; r<ROWS; r++) { iceGrid[r] = new Array(COLS).fill(0); }
     let iceCount = 0;
     
-    // 前 6 关使用固定平滑阵型，之后随机对称阵型
     if (lvl <= 6) {
         let pattern = ICE_PATTERNS[lvl - 1];
         pattern.forEach(c => { iceGrid[c[0]][c[1]] = 1; iceCount++; });
@@ -397,14 +481,12 @@ function generateLevelData(lvl) {
         for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(iceGrid[r][c]===1) iceCount++;
     }
     
-    // 宽容的步数公式
-    let baseMoves = iceCount + 15 - Math.floor(lvl / 3);
-    if (baseMoves < iceCount + 5) baseMoves = iceCount + 5; 
+    let moves = Math.ceil(iceCount / 1.8) + 3; 
+    if (lvl === 1) moves = 15;
+    if (lvl === 2) moves = 18;
+    if (lvl === 3) moves = 20;
     
-    // 核心机制：失败补偿！每次失败，下次重玩多给 5 步
-    let finalMoves = baseMoves + (failCount * 5);
-    
-    return { moves: finalMoves, ice: iceCount };
+    return { moves: moves, ice: iceCount };
 }
 
 function updateUI() {
@@ -429,11 +511,7 @@ function updateUI() {
 function showStartModal() {
     isPaused = true;
     document.getElementById('start-level-title').innerText = `第 ${level} 关`;
-    
-    // 如果触发了失败补偿，给玩家提示
-    let extraText = failCount > 0 ? ` (已获得系统援助 +${failCount * 5} 步)` : "";
-    document.getElementById('start-moves-count').innerText = movesLeft + extraText;
-    
+    document.getElementById('start-moves-count').innerText = movesLeft;
     document.getElementById('start-ice-count').innerText = iceLeft;
     document.getElementById('start-modal').style.display = 'flex';
 }
@@ -599,7 +677,7 @@ window.addEventListener('resize', resize);
 function initGrid() {
     let attempts = 0;
     do {
-        grid = []; dyingGems = []; particles = []; currentCombo = 1;
+        grid = []; dyingGems = []; particles = []; lightnings = []; currentCombo = 1;
         for (let r = 0; r < ROWS; r++) {
             grid[r] = [];
             for (let c = 0; c < COLS; c++) {
@@ -618,7 +696,7 @@ function initGrid() {
 }
 
 function resetGame(fullReset = false) {
-    if (fullReset) { level = 1; score = 0; failCount = 0; }
+    if (fullReset) { level = 1; score = 0; }
     let levelData = generateLevelData(level);
     movesLeft = levelData.moves;
     iceLeft = levelData.ice;
@@ -691,6 +769,7 @@ function checkMatches() {
         if (match.length >= 5) {
             let spawnGem = match[Math.floor(match.length / 2)];
             specialsToSpawn.push({ r: spawnGem.r, c: spawnGem.c, colorIndex: spawnGem.colorIndex, type: TYPE_MAGIC });
+            showFloatingText("🌈 彩虹神力！", "#c678dd", spawnGem.r, spawnGem.c);
         } else if (match.length === 4) {
             let spawnGem = match[Math.floor(match.length / 2)];
             specialsToSpawn.push({ r: spawnGem.r, c: spawnGem.c, colorIndex: spawnGem.colorIndex, type: isH ? TYPE_LINE_V : TYPE_LINE_H });
@@ -706,9 +785,14 @@ function processMatches(matchData) {
     gameState = 'DESTROYING'; 
     score += (initialGems.length * 10) + ((currentCombo - 1) * 10);
 
+    // 灵魂注入：连击夸奖
+    if (currentCombo === 3) showFloatingText("👍 棒！", "#e5c07b", -1, -1, true);
+    if (currentCombo === 4) showFloatingText("🔥 太厉害了！", "#e06c75", -1, -1, true);
+    if (currentCombo >= 5) showFloatingText("👑 完美！", "#c678dd", -1, -1, true);
+
     let queue = [...initialGems];
     let destroyed = new Set();
-    let hasBomb = false, hasMagic = false, iceBroken = false;
+    let hasBomb = false, iceBroken = false;
 
     while (queue.length > 0) {
         let gem = queue.shift();
@@ -732,19 +816,10 @@ function processMatches(matchData) {
                     if (r >= 0 && r < ROWS && c >= 0 && c < COLS && grid[r][c]) queue.push(grid[r][c]);
                 }
             }
-        } else if (gem.type === TYPE_MAGIC) {
-            hasMagic = true;
-            let randomColor = Math.floor(Math.random() * 5);
-            for (let r = 0; r < ROWS; r++) {
-                for (let c = 0; c < COLS; c++) {
-                    if (grid[r][c] && grid[r][c].colorIndex === randomColor) queue.push(grid[r][c]);
-                }
-            }
         }
     }
 
-    if (hasMagic) { Sound.magic(); screenShake = 15; }
-    else if (hasBomb) { Sound.bomb(); screenShake = 10; }
+    if (hasBomb) { Sound.bomb(); screenShake = 10; }
     else if (iceBroken) { Sound.iceBreak(); }
     else { Sound.match(currentCombo); }
 
@@ -768,21 +843,111 @@ function processMatches(matchData) {
     return true;
 }
 
-function getSmartColor() {
-    if (movesLeft <= 8) {
-        let neededColors = [];
+function drawLightning(ctx, l) {
+    ctx.beginPath();
+    ctx.moveTo(l.x1, l.y1);
+    let segments = 4;
+    for(let i=1; i<segments; i++) {
+        let nx = l.x1 + (l.x2-l.x1)*(i/segments) + (Math.random()-0.5)*20;
+        let ny = l.y1 + (l.y2-l.y1)*(i/segments) + (Math.random()-0.5)*20;
+        ctx.lineTo(nx, ny);
+    }
+    ctx.lineTo(l.x2, l.y2);
+    ctx.strokeStyle = l.color; ctx.lineWidth = 4;
+    ctx.shadowColor = l.color; ctx.shadowBlur = 10;
+    ctx.stroke(); ctx.shadowBlur = 0;
+}
+
+/**
+ * 灵魂注入：特效组合神技
+ */
+function handleSpecialSwap(gem1, gem2) {
+    let gemsToRemove = new Set();
+    let t1 = gem1.type, t2 = gem2.type;
+    let hasMagic = (t1 === TYPE_MAGIC || t2 === TYPE_MAGIC);
+
+    if (t1 === TYPE_MAGIC && t2 === TYPE_MAGIC) {
+        // 彩虹 + 彩虹：终极清屏
+        for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(grid[r][c]) gemsToRemove.add(grid[r][c]);
+        Sound.magic();
+        showFloatingText("💥 终极清屏！", "#fff", -1, -1, true);
+    }
+    else if (hasMagic) {
+        // 彩虹 + 炸弹/闪电：全盘同色变异
+        let magicGem = t1 === TYPE_MAGIC ? gem1 : gem2;
+        let otherGem = t1 === TYPE_MAGIC ? gem2 : gem1;
+        let targetColor = otherGem.colorIndex;
+        let newType = otherGem.type;
+
         for(let r=0; r<ROWS; r++) {
             for(let c=0; c<COLS; c++) {
-                if(iceGrid[r][c] > 0 && grid[r][c]) {
-                    neededColors.push(grid[r][c].colorIndex);
+                if(grid[r][c] && grid[r][c].colorIndex === targetColor) {
+                    grid[r][c].type = newType; 
+                    gemsToRemove.add(grid[r][c]);
                 }
             }
         }
-        if (neededColors.length > 0 && Math.random() < 0.5) {
-            return neededColors[Math.floor(Math.random() * neededColors.length)];
-        }
+        gemsToRemove.add(magicGem);
+        Sound.magic();
+        showFloatingText("🔥 满屏变异！", "#e06c75", -1, -1, true);
     }
-    return Math.floor(Math.random() * 5);
+    else if (t1 === TYPE_BOMB && t2 === TYPE_BOMB) {
+        // 炸弹 + 炸弹：5x5 大爆炸
+        let cr = gem1.r, cc = gem1.c;
+        for(let r = cr-2; r <= cr+2; r++) {
+            for(let c = cc-2; c <= cc+2; c++) {
+                if(r>=0 && r<ROWS && c>=0 && c<COLS && grid[r][c]) gemsToRemove.add(grid[r][c]);
+            }
+        }
+        Sound.bomb();
+    }
+    else if ((t1 === TYPE_BOMB && (t2 === TYPE_LINE_H || t2 === TYPE_LINE_V)) ||
+             (t2 === TYPE_BOMB && (t1 === TYPE_LINE_H || t1 === TYPE_LINE_V))) {
+        // 炸弹 + 闪电：巨大十字架 (3行3列)
+        let cr = gem1.r, cc = gem1.c;
+        for(let r=0; r<ROWS; r++) {
+            for(let c=cc-1; c<=cc+1; c++) if(c>=0 && c<COLS && grid[r][c]) gemsToRemove.add(grid[r][c]);
+        }
+        for(let c=0; c<COLS; c++) {
+            for(let r=cr-1; r<=cr+1; r++) if(r>=0 && r<ROWS && grid[r][c]) gemsToRemove.add(grid[r][c]);
+        }
+        Sound.bomb();
+        showFloatingText("✝️ 十字爆破！", "#e5c07b", -1, -1, true);
+    }
+    else if ((t1 === TYPE_LINE_H || t1 === TYPE_LINE_V) && (t2 === TYPE_LINE_H || t2 === TYPE_LINE_V)) {
+        // 闪电 + 闪电：普通十字
+        let cr = gem1.r, cc = gem1.c;
+        for(let r=0; r<ROWS; r++) if(grid[r][cc]) gemsToRemove.add(grid[r][cc]);
+        for(let c=0; c<COLS; c++) if(grid[cr][c]) gemsToRemove.add(grid[cr][c]);
+        Sound.bomb();
+    }
+
+    processMatches({ gemsToRemove: Array.from(gemsToRemove), specialsToSpawn: [] });
+}
+
+function handleMagicSwap(gem1, gem2) {
+    let magicGem = gem1.type === TYPE_MAGIC ? gem1 : gem2;
+    let targetGem = gem1.type === TYPE_MAGIC ? gem2 : gem1;
+    let targetColor = targetGem.colorIndex;
+
+    pendingMagicTargets = [];
+    for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(grid[r][c] && grid[r][c].colorIndex === targetColor) pendingMagicTargets.push(grid[r][c]);
+    pendingMagicTargets.push(magicGem);
+
+    lightnings = [];
+    pendingMagicTargets.forEach(t => {
+        if (t !== magicGem) {
+            lightnings.push({
+                x1: magicGem.x + cellSize/2, y1: magicGem.y + cellSize/2,
+                x2: t.x + cellSize/2, y2: t.y + cellSize/2,
+                color: targetGem.color || '#fff',
+                life: 25 
+            });
+        }
+    });
+
+    gameState = 'MAGIC_EFFECT';
+    Sound.magic();
 }
 
 function applyGravity() {
@@ -797,7 +962,15 @@ function applyGravity() {
             }
         }
         for (let i = 0; i < emptySlots; i++) {
-            let colorIdx = getSmartColor();
+            // 防意外连击算法
+            let colorIdx; let attempts = 0;
+            do {
+                colorIdx = Math.floor(Math.random() * 5); attempts++;
+                let vMatch = (i < ROWS - 2 && grid[i+1] && grid[i+1][c] && grid[i+1][c].colorIndex === colorIdx && 
+                                              grid[i+2] && grid[i+2][c] && grid[i+2][c].colorIndex === colorIdx);
+                if (!vMatch) break;
+            } while (attempts < 5);
+            
             let newGem = new Gem(i, c, colorIdx);
             newGem.y = (i - emptySlots) * cellSize; newGem.targetY = i * cellSize;
             grid[i][c] = newGem;
@@ -817,19 +990,6 @@ function attemptSwap(gem1, gem2, isReverting = false) {
     gem1.r = gem2.r; gem1.c = gem2.c; gem2.r = tempR; gem2.c = tempC;
     gem1.targetX = gem1.c * cellSize; gem1.targetY = gem1.r * cellSize;
     gem2.targetX = gem2.c * cellSize; gem2.targetY = gem2.r * cellSize;
-}
-
-function handleMagicSwap(gem1, gem2) {
-    let magicGem = gem1.type === TYPE_MAGIC ? gem1 : gem2;
-    let targetGem = gem1.type === TYPE_MAGIC ? gem2 : gem1;
-    let gemsToRemove = [magicGem];
-    
-    if (gem1.type === TYPE_MAGIC && gem2.type === TYPE_MAGIC) {
-        for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(grid[r][c]) gemsToRemove.push(grid[r][c]);
-    } else {
-        for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(grid[r][c] && grid[r][c].colorIndex === targetGem.colorIndex) gemsToRemove.push(grid[r][c]);
-    }
-    processMatches({ gemsToRemove: gemsToRemove, specialsToSpawn: [] });
 }
 
 /**
@@ -896,20 +1056,37 @@ window.addEventListener('touchend', handlePointerUp, {passive: false});
 canvas.addEventListener('touchmove', (e) => { e.preventDefault(); }, {passive: false});
 
 /**
- * 胜负判定 (包含失败补偿逻辑)
+ * 胜负判定 (灵魂注入：过关狂欢)
  */
 function checkWinLose() {
     if (iceLeft <= 0) {
-        failCount = 0; // 过关清零失败次数
-        showMsg("🎉 完美过关！", `太棒了！您打破了第 ${level} 关的所有冰块。`, "下一关", () => {
-            level++; resetGame(false);
-        }, true);
-        return true;
+        if (movesLeft > 0 && gameState !== 'BONUS_TIME') {
+            gameState = 'BONUS_TIME';
+            bonusTimer = 0;
+            showFloatingText("🎉 狂欢时间！", "#98c379", -1, -1, true);
+            return false; 
+        }
+        
+        if (movesLeft <= 0) {
+            let hasSpecials = false;
+            for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(grid[r][c] && grid[r][c].type > 0) hasSpecials = true;
+            
+            if (hasSpecials && gameState === 'BONUS_TIME') {
+                let specials = [];
+                for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(grid[r][c] && grid[r][c].type > 0) specials.push(grid[r][c]);
+                processMatches({ gemsToRemove: specials, specialsToSpawn: [] });
+                return false;
+            }
+
+            showMsg("🎉 完美过关！", `太棒了！您打破了第 ${level} 关的所有冰块。`, "下一关", () => {
+                level++; resetGame(false);
+            }, true);
+            return true;
+        }
     }
     
-    if (movesLeft <= 0) {
-        failCount++; // 失败次数+1，下次多给5步
-        showMsg("💔 步数耗尽", "很遗憾，您没有在规定步数内打破所有冰块。\n（系统已为您准备了额外步数援助！）", "重新挑战", () => {
+    if (movesLeft <= 0 && iceLeft > 0) {
+        showMsg("💔 步数耗尽", "很遗憾，您没有在规定步数内打破所有冰块。\n（提示：多合成炸弹和直线特效！）", "重新挑战", () => {
             resetGame(false); 
         }, false);
         return true;
@@ -985,10 +1162,53 @@ function gameLoop() {
         if (particles[i].life <= 0) particles.splice(i, 1);
     }
 
-    if (!isAnimating && !isDestroying && !isPaused) {
+    if (gameState === 'MAGIC_EFFECT') {
+        let allDead = true;
+        lightnings.forEach(l => {
+            if (l.life > 0) {
+                drawLightning(ctx, l);
+                l.life--;
+                allDead = false;
+            }
+        });
+        if (allDead) {
+            processMatches({ gemsToRemove: pendingMagicTargets, specialsToSpawn: [] });
+        }
+    }
+
+    // 灵魂注入：过关狂欢逻辑
+    if (gameState === 'BONUS_TIME') {
+        bonusTimer++;
+        if (bonusTimer > 15) { 
+            bonusTimer = 0;
+            if (movesLeft > 0) {
+                movesLeft--; updateUI();
+                let normalGems = [];
+                for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(grid[r][c] && grid[r][c].type === TYPE_NORMAL) normalGems.push(grid[r][c]);
+                if (normalGems.length > 0) {
+                    let g = normalGems[Math.floor(Math.random() * normalGems.length)];
+                    g.type = Math.random() > 0.5 ? TYPE_LINE_H : TYPE_BOMB;
+                    Sound.swap(); spawnParticles(g.x, g.y, '#fff');
+                }
+            } else {
+                let specials = [];
+                for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(grid[r][c] && grid[r][c].type > 0) specials.push(grid[r][c]);
+                if (specials.length > 0) {
+                    processMatches({ gemsToRemove: specials, specialsToSpawn: [] });
+                } else {
+                    gameState = 'IDLE'; 
+                }
+            }
+        }
+    }
+
+    if (!isAnimating && !isDestroying && !isPaused && gameState !== 'MAGIC_EFFECT' && gameState !== 'BONUS_TIME') {
         if (gameState === 'SWAPPING') {
             if (!swapContext.isReverting) {
-                if (swapContext.gem1.type === TYPE_MAGIC || swapContext.gem2.type === TYPE_MAGIC) {
+                // 灵魂注入：特效组合判定
+                if (swapContext.gem1.type > 0 && swapContext.gem2.type > 0) {
+                    handleSpecialSwap(swapContext.gem1, swapContext.gem2);
+                } else if (swapContext.gem1.type === TYPE_MAGIC || swapContext.gem2.type === TYPE_MAGIC) {
                     handleMagicSwap(swapContext.gem1, swapContext.gem2);
                 } else {
                     let matchData = checkMatches();
